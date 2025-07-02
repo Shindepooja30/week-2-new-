@@ -1,9 +1,3 @@
-Here's a clean, professional `README.md` you can directly paste into your GitHub repo for the EMG-controlled multi-servo project:
-
----
-
-# 💪 EMG-Controlled Robotic Fingers using Raspberry Pi Pico & SG90 Servos
-
 ## Overview
 
 This project demonstrates **EMG signal-based control of robotic fingers** using the Raspberry Pi Pico and SG90 servo motors. It detects muscle flex and double-flex gestures via an EMG sensor and maps these to corresponding servo motions — simulating lifelike robotic hand movement.
