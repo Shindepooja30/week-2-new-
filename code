@@ -1,0 +1,90 @@
+from machine import ADC, Pin, PWM, Timer
+import time
+import utime
+import math
+
+# Setup EMG sensor on GPIO 26
+emg = ADC(Pin(26))
+
+# Setup three SG90 servos on GPIO pins 15, 14, 13
+servo_pins = [15, 14, 13]
+servos = []
+
+for pin in servo_pins:
+    pwm = PWM(Pin(pin))
+    pwm.freq(50)
+    servos.append(pwm)
+
+# Move servo to angle (SG90 range is roughly 0.5ms to 2.5ms pulse width)
+def moveServo(servo, angle):
+    min_duty = 2000   # ~0.5ms pulse
+    max_duty = 8000   # ~2.5ms pulse
+    duty = int(min_duty + (angle / 180.0) * (max_duty - min_duty))
+    servo.duty_u16(duty)
+
+# Move all servos with optional phase offset
+def moveAllServos(angle):
+    for i, s in enumerate(servos):
+        moveServo(s, angle)
+        utime.sleep_ms(100 * i)  # Phase delay for realism
+
+# Compute RMS over a buffer of EMG values
+def computeRMS(buffer):
+    square_sum = sum([val * val for val in buffer])
+    mean_square = square_sum / len(buffer)
+    return int(math.sqrt(mean_square))
+
+# Classify gesture based on RMS value
+def classifyGesture(rms):
+    if rms > 8000:
+        return "double_flex"
+    elif rms > 3000:
+        return "flex"
+    else:
+        return "relax"
+
+# Global EMG buffer
+emg_buffer = []
+BUFFER_SIZE = 10
+last_gesture = "relax"
+
+# Timer callback for non-blocking EMG sampling and control
+def emg_callback(timer):
+    global emg_buffer, last_gesture
+
+    emg_val = emg.read_u16()
+    if len(emg_buffer) >= BUFFER_SIZE:
+        emg_buffer.pop(0)
+    emg_buffer.append(emg_val)
+
+    if len(emg_buffer) == BUFFER_SIZE:
+        rms = computeRMS(emg_buffer)
+        gesture = classifyGesture(rms)
+
+        print("RMS:", rms, "Gesture:", gesture)
+
+        if gesture != last_gesture:
+            if gesture == "flex":
+                print("\U0001F4AA Flex Detected → Close hand")
+                moveAllServos(160)
+            elif gesture == "double_flex":
+                print("\U0001F44B Double Flex Detected → Wave motion")
+                for _ in range(2):
+                    moveAllServos(160)
+                    utime.sleep_ms(200)
+                    moveAllServos(30)
+                    utime.sleep_ms(200)
+            elif gesture == "relax":
+                print("\U0001F9D8 Relaxed → Open hand")
+                moveAllServos(8)
+
+        last_gesture = gesture
+
+# Initialize timer for periodic EMG reading (non-blocking)
+timer = Timer()
+timer.init(freq=10, mode=Timer.PERIODIC, callback=emg_callback)
+
+# Keep main thread alive
+while True:
+    utime.sleep(1)
+
